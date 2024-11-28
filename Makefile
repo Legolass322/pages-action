@@ -97,6 +97,7 @@ install: $(SAXON) | target
 	bundle update
 	npm --no-color install -g uglify-js
 	npm --no-color install -g sass@1.77.2
+	npm --no-color install -g html-minifier
 
 entry: target/docker-image.txt target/fb/simple.fb
 	img=$$(cat target/docker-image.txt)
