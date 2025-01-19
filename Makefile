@@ -26,6 +26,8 @@
 .SHELLFLAGS := -x -e -o pipefail -c
 SHELL := bash
 
+OS_NAME := $(shell uname -s | tr A-Z a-z)
+
 YAMLS = $(wildcard tests/*.yml)
 FBS = $(subst tests/,target/fb/,${YAMLS:.yml=.fb})
 HTMLS = $(subst fb/,html/,${FBS:.fb=.html})
@@ -67,6 +69,20 @@ target/html/%.html: target/output/%
 	while IFS= read -r xpath; do
 		xmllint --xpath "$${xpath}" "$$(dirname "$@")/$${n}-vitals.html" > /dev/null
 	done <<< "$${xpaths}"
+	set +e
+	tidy -e "$$(dirname "$@")/$${n}.html"
+	result=$?
+	if [ "$${result}" -eq "2" ]; then
+		echo "$$(dirname "$@")/$${n}.html has errors"
+		exit 1
+	fi
+	tidy -e "$$(dirname "$@")/$${n}-vitals.html"
+	result=$?
+	if [ "$${result}" -eq "2" ]; then
+		echo "$$(dirname "$@")/$${n}-vitals.html has errors"
+		exit 1
+	fi
+	set -e
 
 target/fb/%.fb: tests/%.yml Makefile | target/fb
 	if [ -e "$@" ]; then $(JUDGES) trim --query='(always)' "$@"; fi
@@ -95,6 +111,13 @@ $(SAXON): | target
 
 install: $(SAXON) | target
 	bundle update
+
+	if [ "$(OS_NAME)" = "darwin" ]; then
+		brew install tidy-html5
+	else
+		apt-get install -y tidy
+	fi
+
 	npm --no-color install -g uglify-js
 	npm --no-color install -g sass@1.77.2
 
