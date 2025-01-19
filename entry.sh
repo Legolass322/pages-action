@@ -107,5 +107,6 @@ java -jar "${SELF}/target/saxon.jar" \
     "logo=${INPUT_LOGO}" \
     "css=$(cat "${SELF}/target/css/main.css")" \
     "js=$(cat "${SELF}/target/js/main.js")"
+html-minifier "${html}" --collapse-whitespace -o "${html}"
 echo "HTML generated at ${html}"
 rm "${INPUT_OUTPUT}/${name}.rich.xml"
