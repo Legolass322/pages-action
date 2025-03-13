@@ -2,11 +2,13 @@
 # SPDX-License-Identifier: MIT
 
 .ONESHELL:
-.PHONY: clean all assets install rake
+.PHONY: clean all assets install rake stylelint
 .SILENT:
 .SECONDARY:
 .SHELLFLAGS := -x -e -o pipefail -c
 SHELL := bash
+
+OS_NAME := $(shell uname -s | tr A-Z a-z)
 
 YAMLS = $(wildcard tests/*.yml)
 FBS = $(subst tests/,target/fb/,${YAMLS:.yml=.fb})
@@ -49,6 +51,17 @@ target/html/%.html: target/output/%
 	while IFS= read -r xpath; do
 		xmllint --xpath "$${xpath}" "$$(dirname "$@")/$${n}-vitals.html" > /dev/null
 	done <<< "$${xpaths}"
+	result=0
+	tidy -e "$$(dirname "$@")/$${n}.html" || result=$?
+	if [ "$${result}" -eq "2" ]; then
+		echo "$$(dirname "$@")/$${n}.html has errors"
+		exit 1
+	fi
+	tidy -e "$$(dirname "$@")/$${n}-vitals.html" || result=$?
+	if [ "$${result}" -eq "2" ]; then
+		echo "$$(dirname "$@")/$${n}-vitals.html has errors"
+		exit 1
+	fi
 
 target/fb/%.fb: tests/%.yml Makefile | target/fb
 	if [ -e "$@" ]; then $(JUDGES) trim --query='(always)' "$@"; fi
@@ -57,10 +70,14 @@ target/fb/%.fb: tests/%.yml Makefile | target/fb
 rake: $(SAXON)
 	bundle exec rake
 
-$(CSS): sass/*.scss Makefile | target/css
+stylelint: sass/*.scss
+	stylelint sass/*.scss --fix
+
+$(CSS): sass/*.scss stylelint Makefile | target/css
 	sass --no-source-map --style=compressed --no-quiet --stop-on-error sass/main.scss "$@"
 
 $(JS): js/*.js Makefile | target/js
+	eslint js/*.js
 	uglifyjs js/*.js > "$@"
 
 clean:
@@ -77,8 +94,17 @@ $(SAXON): | target
 
 install: $(SAXON) | target
 	bundle install
-	npm --no-color install -g uglify-js
+	if [ "$(OS_NAME)" = "darwin" ]; then
+		brew install tidy-html5
+	else
+		if ! ([ -f /proc/self/cgroup ] && grep -q ":" /proc/self/cgroup); then
+			apt-get install -y tidy
+		fi
+	fi
+	npm --no-color install -g eslint@9.22.0
+	npm --no-color install -g uglify-js@3.19.3
 	npm --no-color install -g sass@1.77.2
+	npm --no-color install -g stylelint@16.15.0 stylelint-config-standard@37.0.0 stylelint-scss@6.11.1
 
 entry: target/docker-image.txt target/fb/simple.fb
 	img=$$(cat target/docker-image.txt)
